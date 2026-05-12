@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="FutHub ERP">
 <meta name="theme-color" content="#0A0A0A">
 <title>FutHub Store — ERP</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -178,9 +179,79 @@ tbody tr:hover td{background:var(--gold-pale)}
   .metrics{grid-template-columns:1fr 1fr}
   .content{padding:14px}
 }
+
+/* ── LOGIN SCREEN ── */
+#login-screen {
+  position:fixed;inset:0;background:var(--bk);
+  display:flex;align-items:center;justify-content:center;
+  z-index:999;flex-direction:column;gap:0;
+}
+.login-box {
+  background:var(--bk3);border:var(--border-gb);
+  border-radius:var(--radxl);padding:40px 36px;
+  width:90%;max-width:380px;
+  box-shadow:0 20px 60px rgba(0,0,0,.8);
+  text-align:center;
+}
+.login-logo {
+  width:72px;height:72px;
+  background:radial-gradient(circle at 40% 35%,#E8C97A,#C9A84C 45%,#8A6E2F 80%);
+  border-radius:50%;border:2px solid var(--gold);
+  display:flex;align-items:center;justify-content:center;
+  font-size:30px;margin:0 auto 16px;
+  box-shadow:0 0 24px rgba(201,168,76,.25);
+}
+.login-title {
+  font-family:'Cinzel',serif;font-size:20px;font-weight:700;
+  color:var(--gold);letter-spacing:2px;margin-bottom:4px;
+}
+.login-sub { font-size:12px;color:var(--tx3);letter-spacing:2px;margin-bottom:28px; }
+.login-field { display:flex;flex-direction:column;gap:5px;margin-bottom:14px;text-align:left; }
+.login-field label { font-size:11px;color:var(--tx3);font-weight:600;letter-spacing:1px;text-transform:uppercase; }
+.login-field input {
+  background:var(--bk4);border:var(--border-g);border-radius:var(--rad);
+  padding:10px 14px;color:var(--tx);font-family:'DM Sans',sans-serif;
+  font-size:14px;transition:border-color .2s;
+}
+.login-field input:focus { outline:none;border-color:var(--gold);background:var(--gold-pale); }
+.login-btn {
+  width:100%;padding:11px;background:var(--gold);color:var(--bk);
+  border:none;border-radius:var(--rad);font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;
+  letter-spacing:.5px;margin-top:6px;
+}
+.login-btn:hover { background:var(--gold-l); }
+.login-btn:disabled { opacity:.5;cursor:not-allowed; }
+.login-error {
+  background:var(--rd);color:var(--r);border:1px solid #7A2020;
+  border-radius:var(--rad);padding:9px 14px;font-size:12px;
+  margin-top:12px;display:none;
+}
+.login-footer { margin-top:20px;font-size:11px;color:var(--tx3); }
 </style>
 </head>
 <body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">⚽</div>
+    <div class="login-title">FUT HUB</div>
+    <div class="login-sub">STORE · ERP · EST. 2026</div>
+    <div class="login-field">
+      <label>Email</label>
+      <input id="login-email" type="email" placeholder="seu@email.com" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label>Senha</label>
+      <input id="login-pass" type="password" placeholder="••••••••" autocomplete="current-password"
+             onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="login-btn" id="login-btn" onclick="doLogin()">Entrar</button>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-footer">FutHub Store · Belo Horizonte/MG</div>
+  </div>
+</div>
 
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
 
@@ -209,6 +280,9 @@ tbody tr:hover td{background:var(--gold-pale)}
     <div class="page-title" id="page-title">Dashboard</div>
     <div class="topbar-right">
       <span id="conn-dot" title="Status da conexão"></span>
+      <button onclick="doLogout()" class="sync-btn" title="Sair" style="color:var(--r);border-color:var(--r)">
+        <i class="ti ti-logout"></i> Sair
+      </button>
       <span id="conn-label" style="font-size:11px;color:var(--tx3)">Conectando...</span>
       <span id="tb-date" style="font-size:11px;color:var(--tx3)"></span>
     </div>
@@ -477,12 +551,57 @@ tbody tr:hover td{background:var(--gold-pale)}
 const SB_URL = 'https://wayzuddrgsvkdxbkqdrc.supabase.co';
 const SB_KEY = 'sb_publishable_CW6ipgDXFrCwQMW-7wbG3g_hIh_7RvA';
 
-// ── API LAYER ────────────────────────────────────────────
+// Cliente oficial Supabase (inclui Auth)
+const _sb = supabase.createClient(SB_URL, SB_KEY);
+
+let _authToken = null; // JWT do usuário logado
+
+// ── AUTH ─────────────────────────────────────────────────
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-pass').value;
+  const btn   = document.getElementById('login-btn');
+  const err   = document.getElementById('login-error');
+
+  if(!email || !pass) { showLoginError('Preencha email e senha.'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+  err.style.display = 'none';
+
+  const { data, error } = await _sb.auth.signInWithPassword({ email, password: pass });
+
+  if(error) {
+    showLoginError('Email ou senha incorretos.');
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+    return;
+  }
+
+  _authToken = data.session.access_token;
+  document.getElementById('login-screen').style.display = 'none';
+  await initApp();
+}
+
+function showLoginError(msg) {
+  const err = document.getElementById('login-error');
+  err.textContent = msg;
+  err.style.display = 'block';
+}
+
+async function doLogout() {
+  await _sb.auth.signOut();
+  _authToken = null;
+  location.reload();
+}
+
+// ── API LAYER (usa token do usuário logado) ───────────────
 async function sbFetch(path, opts={}) {
+  const token = _authToken || SB_KEY;
   const res = await fetch(SB_URL + '/rest/v1/' + path, {
     headers: {
       'apikey': SB_KEY,
-      'Authorization': 'Bearer ' + SB_KEY,
+      'Authorization': 'Bearer ' + token,
       'Content-Type': 'application/json',
       'Prefer': opts.prefer || 'return=representation',
       ...opts.headers
@@ -498,10 +617,10 @@ async function sbFetch(path, opts={}) {
 }
 
 const db = {
-  get:    (t,q='')     => sbFetch(t + (q?'?'+q:''),          {method:'GET', prefer:''}),
-  post:   (t,body)     => sbFetch(t,                          {method:'POST', body:JSON.stringify(body)}),
-  patch:  (t,q,body)   => sbFetch(t+'?'+q,                   {method:'PATCH', body:JSON.stringify(body)}),
-  delete: (t,q)        => sbFetch(t+'?'+q,                   {method:'DELETE', prefer:''}),
+  get:    (t,q='')   => sbFetch(t + (q?'?'+q:''), {method:'GET', prefer:''}),
+  post:   (t,body)   => sbFetch(t,                 {method:'POST', body:JSON.stringify(body)}),
+  patch:  (t,q,body) => sbFetch(t+'?'+q,           {method:'PATCH', body:JSON.stringify(body)}),
+  delete: (t,q)      => sbFetch(t+'?'+q,           {method:'DELETE', prefer:''}),
 };
 
 // ── CACHE LOCAL (para velocidade de UI) ─────────────────
@@ -1256,8 +1375,7 @@ function calcBuf() {
 document.getElementById('tb-date').textContent =
   new Date().toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'short'});
 
-// Testa conexão e carrega dashboard
-(async () => {
+async function initApp() {
   try {
     await ensureProdutos();
     await ensureVendas();
@@ -1267,6 +1385,17 @@ document.getElementById('tb-date').textContent =
     setConn(false);
     toast('Erro de conexão com Supabase','err');
   }
+}
+
+// Verifica sessão existente ao carregar
+(async () => {
+  const { data } = await _sb.auth.getSession();
+  if(data?.session) {
+    _authToken = data.session.access_token;
+    document.getElementById('login-screen').style.display = 'none';
+    await initApp();
+  }
+  // Se não tiver sessão, a tela de login já está visível
 })();
 </script>
 </body>
