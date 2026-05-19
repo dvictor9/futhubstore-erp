@@ -782,29 +782,119 @@ function renderEst() {
 }
 
 async function saveProd() {
-  const sku  = document.getElementById('p-sku').value.trim();
+  const sku  = document.getElementById('p-sku').value.trim().toUpperCase();
   const nome = document.getElementById('p-nome').value.trim();
   if(!sku||!nome) { toast('SKU e nome obrigatórios','err'); return; }
+
   const cusd  = parseFloat(document.getElementById('p-cusd').value)||0;
   const cot   = parseFloat(document.getElementById('p-cot').value)||5.10;
   const frete = parseFloat(document.getElementById('p-frete').value)||0;
   const imp   = parseFloat(document.getElementById('p-imp').value)||0;
-  const body  = {
+  const novaQtd    = parseInt(document.getElementById('p-qtd').value)||0;
+  const novoRastreio = document.getElementById('p-rastreio').value.trim();
+  const novoStatus = document.getElementById('p-status').value;
+
+  // Verifica se SKU já existe no banco
+  const existente = C.produtos.find(p => p.sku === sku);
+
+  if (existente) {
+    // SKU já existe — oferece opções
+    const qtdAtual = existente.qtd_estoque || 0;
+    const escolha = confirm(
+      `O SKU "${sku}" já existe no estoque (${qtdAtual} un.).
+
+` +
+      `Novo lote: +${novaQtd} un. → Total ficaria: ${qtdAtual + novaQtd} un.
+
+` +
+      `OK = Somar estoque do novo lote
+` +
+      `Cancelar = Não fazer nada`
+    );
+    if (!escolha) return;
+
+    // Monta patch: soma qtd, atualiza custo médio ponderado, adiciona rastreio
+    const qtdTotal   = qtdAtual + novaQtd;
+    const custoMedio = qtdTotal > 0
+      ? parseFloat(((existente.custo_usd * qtdAtual + cusd * novaQtd) / qtdTotal).toFixed(2))
+      : cusd;
+    const cotMedia = qtdTotal > 0
+      ? parseFloat(((existente.cotacao_brl * qtdAtual + cot * novaQtd) / qtdTotal).toFixed(4))
+      : cot;
+
+    const patchBody = {
+      qtd_estoque:    qtdTotal,
+      custo_usd:      custoMedio,
+      cotacao_brl:    cotMedia,
+      frete_unit_brl: frete || existente.frete_unit_brl,
+      imposto_brl:    imp || existente.imposto_brl,
+      status:         novoStatus,
+      rastreio_atual: novoRastreio || existente.rastreio_atual,
+      fornecedor_ref: document.getElementById('p-forn').value.trim() || existente.fornecedor_ref,
+    };
+
+    try {
+      await db.patch('produtos', 'sku=eq.' + sku, patchBody);
+      // Associa ao novo pacote se rastreio for novo
+      if (novoRastreio && novoRastreio !== existente.rastreio_atual) {
+        // Garante que o pacote existe
+        try {
+          await db.post('pacotes', {
+            codigo_rastreio: novoRastreio,
+            linha_rastreio:  'LZ-CN',
+            status:          'em_transito',
+            qtd_itens:       novaQtd,
+          });
+        } catch(pe) {} // ignora se já existe
+        // Associa produto ao pacote
+        try {
+          const [pac] = await db.get('pacotes', 'codigo_rastreio=eq.' + novoRastreio);
+          if(pac) await db.post('pacote_produtos', {
+            pacote_id:      pac.id,
+            produto_id:     existente.id,
+            quantidade:     novaQtd,
+            custo_unit_usd: cusd,
+            cotacao_brl:    cot,
+          });
+        } catch(ae) {}
+      }
+      toast(`✓ ${sku} atualizado! ${qtdAtual} + ${novaQtd} = ${qtdTotal} un.`);
+      togForm('fp');
+      await ensureProdutos(true);
+      renderEst();
+    } catch(e) { toast('Erro ao atualizar: '+e.message,'err'); }
+    return;
+  }
+
+  // SKU novo — insere normalmente
+  const body = {
     sku, nome,
-    versao:         document.getElementById('p-ver').value,
-    tamanho:        document.getElementById('p-tam').value,
-    tipo:           document.getElementById('p-tipo').value,
-    personalizavel: false,
-    custo_usd:      cusd, cotacao_brl: cot, frete_unit_brl: frete, imposto_brl: imp,
+    versao:          document.getElementById('p-ver').value,
+    tamanho:         document.getElementById('p-tam').value,
+    tipo:            document.getElementById('p-tipo').value,
+    personalizavel:  false,
+    custo_usd:       cusd, cotacao_brl: cot,
+    frete_unit_brl:  frete, imposto_brl: imp,
     preco_venda_brl: parseFloat(document.getElementById('p-preco').value)||180,
-    qtd_estoque:    parseInt(document.getElementById('p-qtd').value)||0,
-    status:         document.getElementById('p-status').value,
-    rastreio_atual: document.getElementById('p-rastreio').value.trim(),
-    fornecedor_ref: document.getElementById('p-forn').value.trim(),
+    qtd_estoque:     novaQtd,
+    status:          novoStatus,
+    rastreio_atual:  novoRastreio,
+    fornecedor_ref:  document.getElementById('p-forn').value.trim(),
   };
   try {
     await db.post('produtos', body);
-    toast('Produto cadastrado!');
+    // Cria pacote se tiver rastreio
+    if (novoRastreio) {
+      try {
+        await db.post('pacotes', {
+          codigo_rastreio: novoRastreio,
+          linha_rastreio:  'LZ-CN',
+          status:          'em_transito',
+          qtd_itens:       novaQtd,
+        });
+      } catch(pe) {}
+    }
+    toast('✓ Produto cadastrado!');
     togForm('fp');
     await ensureProdutos(true);
     renderEst();
