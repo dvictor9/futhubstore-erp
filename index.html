@@ -801,15 +801,10 @@ async function saveProd() {
     // SKU já existe — oferece opções
     const qtdAtual = existente.qtd_estoque || 0;
     const escolha = confirm(
-      `O SKU "${sku}" já existe no estoque (${qtdAtual} un.).
-
-` +
-      `Novo lote: +${novaQtd} un. → Total ficaria: ${qtdAtual + novaQtd} un.
-
-` +
-      `OK = Somar estoque do novo lote
-` +
-      `Cancelar = Não fazer nada`
+      'O SKU "' + sku + '" ja existe no estoque (' + qtdAtual + ' un.).\n\n' +
+      'Novo lote: +' + novaQtd + ' un. Total ficaria: ' + (qtdAtual + novaQtd) + ' un.\n\n' +
+      'OK = Somar estoque do novo lote\n' +
+      'Cancelar = Nao fazer nada'
     );
     if (!escolha) return;
 
@@ -970,83 +965,46 @@ async function saveEdit() {
     fornecedor_ref: document.getElementById('edit-forn').value.trim(),
   };
 
-  // ── Sync de pacote inteligente ──────────────────────────────
-  // Separa produtos do pacote em dois grupos:
-  //   exclusivos = só existem neste rastreio → sync automático seguro
-  //   multi     = existem em outros pacotes também → pede confirmação individual
+  // Sync de pacote inteligente
   let sincPacote = 0;
   if(p && novoStatus !== p.status && novoRastreio) {
-
-    // Busca todos os produtos que têm este rastreio como rastreio_atual
     const doPacote = C.produtos.filter(x => x.rastreio_atual === novoRastreio && x.id !== p.id);
 
     if(doPacote.length > 0) {
-      // Classifica cada produto: exclusivo ou multi-pacote
-      // Um produto é multi-pacote se sua qtd_estoque consolidada vem de mais de 1 pacote
-      // Heurística: se o produto tem rastreio_atual diferente de todos os outros do grupo,
-      // ele é exclusivo. Usamos a tabela pacote_produtos para saber isso.
-      // Classifica produtos: exclusivo (só neste rastreio) ou multi-pacote
-      // Usa o cache local C.produtos — produto é exclusivo se rastreio_atual
-      // é único (não aparece em nenhum outro produto com rastreio diferente)
+      // Classifica: exclusivo = SKU unico neste rastreio / multi = SKU em outros pacotes
       const exclusivos = [];
       const multiPacote = [];
-
       for(const prod of doPacote) {
-        // Verifica se algum outro produto no estoque tem rastreio_atual diferente
-        // mas mesmo SKU — indica que existem outras unidades vindas de outro pacote
         const outrasUnidades = C.produtos.filter(x =>
-          x.sku === prod.sku &&
-          x.id !== prod.id &&
-          x.rastreio_atual &&
-          x.rastreio_atual !== novoRastreio
+          x.sku === prod.sku && x.id !== prod.id &&
+          x.rastreio_atual && x.rastreio_atual !== novoRastreio
         );
-        // Também verifica pela qtd: se qtd > unidades esperadas do pacote, é multi
-        // Heurística simples: produto com qtd > 1 e rastreio único pode ser multi
-        if(outrasUnidades.length > 0) {
-          multiPacote.push(prod);
-        } else {
-          exclusivos.push(prod);
-        }
+        if(outrasUnidades.length > 0) multiPacote.push(prod);
+        else exclusivos.push(prod);
       }
 
-      // Monta mensagem clara para o usuário
-      let msg = `Pacote ${novoRastreio} — ${doPacote.length + 1} item(ns)
-
-`;
-
+      // Monta mensagem sem quebras de linha dentro do template literal
+      let msg = 'Pacote ' + novoRastreio + ' — ' + (doPacote.length + 1) + ' item(ns)\n\n';
       if(exclusivos.length > 0) {
-        msg += `✅ Exclusivos deste pacote (serão atualizados automaticamente):
-`;
-        msg += exclusivos.map(x => `  · ${x.sku} ${x.tamanho}`).join('
-') + '
-
-';
+        msg += 'Exclusivos deste pacote (serão atualizados):\n';
+        msg += exclusivos.map(x => '  · ' + x.sku + ' ' + x.tamanho).join('\n') + '\n\n';
       }
-
       if(multiPacote.length > 0) {
-        msg += `⚠️ Multi-pacote (também em outros rastreios — NÃO serão atualizados):
-`;
-        msg += multiPacote.map(x => `  · ${x.sku} ${x.tamanho}`).join('
-') + '
-
-';
-        msg += `Para eles, edite individualmente quando o outro pacote chegar.`;
+        msg += 'Multi-pacote (NÃO serão atualizados agora):\n';
+        msg += multiPacote.map(x => '  · ' + x.sku + ' ' + x.tamanho).join('\n') + '\n\n';
+        msg += 'Para eles, edite individualmente quando o outro pacote chegar.';
       }
 
-      if(confirm(msg + `
-
-Aplicar "${novoStatus}" aos exclusivos?`)) {
-        // Atualiza só os exclusivos
+      if(confirm(msg + '\n\nAplicar "' + novoStatus + '" aos exclusivos?')) {
         for(const prod of exclusivos) {
           try {
-            await db.patch('produtos', 'id=eq.'+prod.id, {status: novoStatus});
+            await db.patch('produtos', 'id=eq.' + prod.id, {status: novoStatus});
             sincPacote++;
           } catch(e) {}
         }
       }
     }
   }
-
   try {
     await db.patch('produtos', 'id=eq.'+id, body);
     closeModal('modal-edit');
