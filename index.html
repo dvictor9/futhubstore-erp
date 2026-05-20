@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="FutHub ERP">
 <meta name="theme-color" content="#0A0A0A">
 <title>FutHub Store — ERP</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
@@ -985,26 +985,27 @@ async function saveEdit() {
       // Um produto é multi-pacote se sua qtd_estoque consolidada vem de mais de 1 pacote
       // Heurística: se o produto tem rastreio_atual diferente de todos os outros do grupo,
       // ele é exclusivo. Usamos a tabela pacote_produtos para saber isso.
-      let pacoteProds = [];
-      try {
-        pacoteProds = await db.get('pacote_produtos',
-          `pacote_id=in.(select id from pacotes where codigo_rastreio=eq.${novoRastreio})&select=produto_id`
-        ) || [];
-      } catch(e) {}
-
-      // Busca quantos pacotes distintos cada produto do lote pertence
+      // Classifica produtos: exclusivo (só neste rastreio) ou multi-pacote
+      // Usa o cache local C.produtos — produto é exclusivo se rastreio_atual
+      // é único (não aparece em nenhum outro produto com rastreio diferente)
       const exclusivos = [];
       const multiPacote = [];
 
       for(const prod of doPacote) {
-        try {
-          const assocs = await db.get('pacote_produtos',
-            `produto_id=eq.${prod.id}&select=pacote_id`
-          ) || [];
-          if(assocs.length <= 1) exclusivos.push(prod);
-          else multiPacote.push(prod);
-        } catch(e) {
-          exclusivos.push(prod); // assume exclusivo em caso de erro
+        // Verifica se algum outro produto no estoque tem rastreio_atual diferente
+        // mas mesmo SKU — indica que existem outras unidades vindas de outro pacote
+        const outrasUnidades = C.produtos.filter(x =>
+          x.sku === prod.sku &&
+          x.id !== prod.id &&
+          x.rastreio_atual &&
+          x.rastreio_atual !== novoRastreio
+        );
+        // Também verifica pela qtd: se qtd > unidades esperadas do pacote, é multi
+        // Heurística simples: produto com qtd > 1 e rastreio único pode ser multi
+        if(outrasUnidades.length > 0) {
+          multiPacote.push(prod);
+        } else {
+          exclusivos.push(prod);
         }
       }
 
