@@ -995,12 +995,14 @@ async function saveEdit() {
         msg += 'Para eles, edite individualmente quando o outro pacote chegar.';
       }
 
-      if(confirm(msg + '\n\nAplicar "' + novoStatus + '" aos exclusivos?')) {
-        for(const prod of exclusivos) {
-          try {
-            await db.patch('produtos', 'id=eq.' + prod.id, {status: novoStatus});
-            sincPacote++;
-          } catch(e) {}
+      if(exclusivos.length > 0 && confirm(msg + '\n\nAplicar "' + novoStatus + '" aos exclusivos?')) {
+        // Patch em batch: um unico request para todos os IDs
+        const ids = exclusivos.map(x => x.id).join(',');
+        try {
+          await db.patch('produtos', 'id=in.(' + ids + ')', {status: novoStatus});
+          sincPacote = exclusivos.length;
+        } catch(e) {
+          toast('Erro ao atualizar pacote: ' + e.message, 'err');
         }
       }
     }
@@ -1030,18 +1032,17 @@ async function loadRastreio() {
     return;
   }
 
-  // Busca associações pacote ↔ produto
-  let assocs = [];
-  try {
-    assocs = await db.get('pacote_produtos', 'select=pacote_id,produto_id,quantidade') || [];
-  } catch(e) {}
-
-  // Monta mapa pacote_id → produtos
+  // Monta mapa pacote rastreio -> produtos usando cache local (sem query extra)
+  // Usa rastreio_atual de cada produto para agrupar
   const pacMap = {};
-  assocs.forEach(a => {
-    if(!pacMap[a.pacote_id]) pacMap[a.pacote_id] = [];
-    const prod = C.produtos.find(p => p.id === a.produto_id);
-    if(prod) pacMap[a.pacote_id].push(prod);
+  pacotes.forEach(pac => { pacMap[pac.id] = []; });
+  C.produtos.forEach(p => {
+    if(!p.rastreio_atual) return;
+    const pac = pacotes.find(x => x.codigo_rastreio === p.rastreio_atual);
+    if(pac) {
+      if(!pacMap[pac.id]) pacMap[pac.id] = [];
+      pacMap[pac.id].push(p);
+    }
   });
 
   if(!pacotes.length) { el.innerHTML='<div class="empty">Nenhum rastreio cadastrado</div>'; return; }
@@ -1083,21 +1084,52 @@ async function loadVendas() {
 async function ensureVendas(force=false) {
   if(!force && C.loaded.vendas) return;
   try {
-    // Usa a view que já traz itens expandidos e totais
-    const data = await db.get('vw_vendas_completas', 'order=criado_em.desc');
-    // Mapeia para formato compatível com o ERP
-    C.vendas = (data||[]).map(v => ({
-      ...v,
-      skus: v.itens ? JSON.parse(typeof v.itens === 'string' ? v.itens : JSON.stringify(v.itens)).map(i=>i.sku).join(', ') : '',
-    }));
+    // Busca vendas simples (sem view complexa)
+    const vendas = await db.get('vendas', 'select=*&order=criado_em.desc') || [];
+
+    // Busca itens de todas as vendas em uma unica chamada
+    let itens = [];
+    if(vendas.length > 0) {
+      try {
+        itens = await db.get('itens_venda', 'select=*&order=venda_id') || [];
+      } catch(e) {}
+    }
+
+    // Monta mapa venda_id -> itens
+    const itensMap = {};
+    itens.forEach(i => {
+      if(!itensMap[i.venda_id]) itensMap[i.venda_id] = [];
+      itensMap[i.venda_id].push(i);
+    });
+
+    // Junta tudo localmente (sem JOIN no banco)
+    C.vendas = vendas.map(v => {
+      const vitens = itensMap[v.id] || [];
+      const totalVenda = vitens.reduce((s,i) => s + (i.quantidade||1)*(i.preco_unit_brl||0), 0);
+      const custoTotal = vitens.reduce((s,i) => s + (i.quantidade||1)*(i.custo_unit_brl||0), 0);
+      const qtdTotal   = vitens.reduce((s,i) => s + (i.quantidade||1), 0);
+      const lucro      = v.status==='cancelado' ? 0
+        : totalVenda - custoTotal - (v.comissao_brl||0) - (v.taxa_pagto_brl||0);
+
+      // Lookup cliente no cache
+      const cli = C.clientes.find(c => c.id === v.cliente_id);
+
+      return {
+        ...v,
+        itens:            vitens,
+        skus:             vitens.map(i => {
+          const p = C.produtos.find(x => x.id === i.produto_id);
+          return p ? p.sku : '?';
+        }).join(', '),
+        cliente_nome:     cli ? cli.nome : (v.cliente_nome || ''),
+        total_brl:        totalVenda,
+        qtd_total:        qtdTotal || 1,
+        lucro_liquido_brl: lucro,
+      };
+    });
     C.loaded.vendas = true;
   } catch(e) {
-    // Fallback: busca direta na tabela vendas
-    try {
-      const data = await db.get('vendas','order=criado_em.desc');
-      C.vendas = data||[];
-      C.loaded.vendas = true;
-    } catch(e2) { toast('Erro vendas: '+e2.message,'err'); }
+    toast('Erro vendas: ' + e.message, 'err');
   }
 }
 
@@ -1303,12 +1335,17 @@ async function cancelarVenda(id) {
   if(!confirm(`Cancelar venda de ${resumo}?`)) return;
   try {
     await db.patch('vendas','id=eq.'+id,{status:'cancelado'});
-    // Devolve estoque (só para vendas, não reservas)
+    // Devolve estoque (so para vendas, nao reservas) — atualiza localmente e persiste
     if(v.tipo==='venda') {
       for(const item of itens) {
         if(!item.produto_id) continue;
         const p = C.produtos.find(x=>x.id===item.produto_id);
-        if(p) await db.patch('produtos','id=eq.'+item.produto_id,{qtd_estoque:(p.qtd_estoque||0)+(item.quantidade||1)});
+        if(!p) continue;
+        const novaQtd = (p.qtd_estoque||0) + (item.quantidade||1);
+        try {
+          await db.patch('produtos','id=eq.'+item.produto_id,{qtd_estoque: novaQtd});
+          p.qtd_estoque = novaQtd; // atualiza cache local imediatamente
+        } catch(e) {}
       }
     }
     await Promise.all([ensureVendas(true),ensureProdutos(true)]);
