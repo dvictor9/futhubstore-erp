@@ -313,7 +313,7 @@ tbody tr:hover td{background:var(--gold-pale)}
           <option value="em estoque">Em estoque</option>
           <option value="entregue">Entregue</option>
         </select>
-        <button class="btn primary" onclick="togForm('fp')"><i class="ti ti-plus"></i> Novo</button>
+        <button class="btn primary" onclick="openNewProd()"><i class="ti ti-plus"></i> Novo</button>
       </div>
       <div class="form-card" id="fp">
         <div style="font-family:'Cinzel',serif;color:var(--gold);margin-bottom:14px;font-size:13px">Cadastrar Produto</div>
@@ -332,7 +332,22 @@ tbody tr:hover td{background:var(--gold-pale)}
           <div class="field"><label>Status</label><select id="p-status"><option>aguardando</option><option>enviado</option><option>em estoque</option><option>entregue</option></select></div>
         </div>
         <div class="fg" style="margin-top:10px">
-          <div class="field"><label>Fornecedor</label><input id="p-forn" placeholder="86 152 1820 4862"></div>
+          <div class="field">
+            <label>Fornecedor</label>
+            <select id="p-forn-select" onchange="onFornSelectChange('p')"></select>
+            <div id="p-forn-inline" style="display:none;margin-top:8px;padding:12px;background:var(--bk4);border:var(--border-g);border-radius:var(--rad)">
+              <div class="fg fg1" style="margin-bottom:8px">
+                <input id="p-forn-new-nome" placeholder="Nome do fornecedor">
+              </div>
+              <div class="fg fg1" style="margin-bottom:8px">
+                <input id="p-forn-new-cont" placeholder="Contato (WeChat, telefone...)">
+              </div>
+              <div class="row">
+                <button class="btn sm primary" onclick="quickAddForn('p')">Salvar Fornecedor</button>
+                <button class="btn sm" onclick="cancelQuickForn('p')">Cancelar</button>
+              </div>
+            </div>
+          </div>
           <div class="field"><label>Rastreio</label><input id="p-rastreio" placeholder="LZ400156193CN"></div>
         </div>
         <div class="row" style="margin-top:14px">
@@ -454,10 +469,11 @@ tbody tr:hover td{background:var(--gold-pale)}
       <div class="row" style="margin-bottom:16px">
         <div class="stl" style="margin:0">Fornecedores</div>
         <div class="sp"></div>
-        <button class="btn primary" onclick="togForm('ff')"><i class="ti ti-plus"></i> Novo</button>
+        <button class="btn primary" onclick="newForn()"><i class="ti ti-plus"></i> Novo</button>
       </div>
       <div class="form-card" id="ff">
-        <div style="font-family:'Cinzel',serif;color:var(--gold);margin-bottom:14px;font-size:13px">Cadastrar Fornecedor</div>
+        <div style="font-family:'Cinzel',serif;color:var(--gold);margin-bottom:14px;font-size:13px" id="ff-title">Cadastrar Fornecedor</div>
+        <input type="hidden" id="f-id">
         <div class="fg">
           <div class="field"><label>Nome</label><input id="f-nome" placeholder="Factory King"></div>
           <div class="field"><label>Plataforma</label><select id="f-plat"><option>WeChat</option><option>AliExpress</option><option>1688</option><option>DHgate</option></select></div>
@@ -468,12 +484,12 @@ tbody tr:hover td{background:var(--gold-pale)}
         </div>
         <div class="field" style="margin-top:10px"><label>Especialidade</label><textarea id="f-obs" rows="2" placeholder="Camisas tailandesas 1:1..."></textarea></div>
         <div class="row" style="margin-top:14px">
-          <button class="btn primary" onclick="saveForn()">Salvar</button>
+          <button class="btn primary" id="ff-btn-save" onclick="saveForn()">Salvar</button>
           <button class="btn" onclick="togForm('ff')">Cancelar</button>
         </div>
       </div>
       <div class="tw"><table>
-        <thead><tr><th>Nome</th><th style="width:84px">Plataforma</th><th style="width:130px">Contato</th><th style="width:76px">Rastreio</th><th style="width:62px">SLA(d)</th><th style="width:72px">Lead(d)</th><th style="width:52px"></th></tr></thead>
+        <thead><tr><th>Nome</th><th style="width:84px">Plataforma</th><th style="width:130px">Contato</th><th style="width:76px">Rastreio</th><th style="width:62px">SLA(d)</th><th style="width:72px">Lead(d)</th><th style="width:76px"></th></tr></thead>
         <tbody id="tb-forn"></tbody>
       </table></div>
     </div>
@@ -536,7 +552,22 @@ tbody tr:hover td{background:var(--gold-pale)}
         </select>
       </div>
       <div class="field"><label>Rastreio</label><input id="edit-rastreio" placeholder="LZ400156193CN"></div>
-      <div class="field"><label>Fornecedor</label><input id="edit-forn"></div>
+      <div class="field">
+        <label>Fornecedor</label>
+        <select id="edit-forn-select" onchange="onFornSelectChange('edit')"></select>
+        <div id="edit-forn-inline" style="display:none;margin-top:8px;padding:12px;background:var(--bk5);border:var(--border-g);border-radius:var(--rad)">
+          <div class="fg fg1" style="margin-bottom:8px">
+            <input id="edit-forn-new-nome" placeholder="Nome do fornecedor">
+          </div>
+          <div class="fg fg1" style="margin-bottom:8px">
+            <input id="edit-forn-new-cont" placeholder="Contato (WeChat, telefone...)">
+          </div>
+          <div class="row">
+            <button class="btn sm primary" onclick="quickAddForn('edit')">Salvar Fornecedor</button>
+            <button class="btn sm" onclick="cancelQuickForn('edit')">Cancelar</button>
+          </div>
+        </div>
+      </div>
       <div class="field"><label>Tipo</label><select id="edit-tipo"><option>Camisa</option><option>Retro</option><option>Jaqueta Zíper</option><option>Jaqueta Meio Zíper</option><option>Conjunto</option><option>Calça</option></select></div>
     </div>
     <div class="modal-footer">
@@ -794,6 +825,13 @@ async function saveProd() {
   const novoRastreio = document.getElementById('p-rastreio').value.trim();
   const novoStatus = document.getElementById('p-status').value;
 
+  const fornSelVal = document.getElementById('p-forn-select').value;
+  if (fornSelVal === '__new__') {
+    toast('Preencha e salve o novo fornecedor antes de continuar (ou cancele)', 'err');
+    return;
+  }
+  const fornEscolhido = fornSelVal;
+
   // Verifica se SKU já existe no banco
   const existente = C.produtos.find(p => p.sku === sku);
 
@@ -825,7 +863,7 @@ async function saveProd() {
       imposto_brl:    imp || existente.imposto_brl,
       status:         novoStatus,
       rastreio_atual: novoRastreio || existente.rastreio_atual,
-      fornecedor_ref: document.getElementById('p-forn').value.trim() || existente.fornecedor_ref,
+      fornecedor_ref: fornEscolhido || existente.fornecedor_ref,
     };
 
     try {
@@ -874,7 +912,7 @@ async function saveProd() {
     qtd_estoque:     novaQtd,
     status:          novoStatus,
     rastreio_atual:  novoRastreio,
-    fornecedor_ref:  document.getElementById('p-forn').value.trim(),
+    fornecedor_ref:  fornEscolhido,
   };
   try {
     await db.post('produtos', body);
@@ -906,7 +944,7 @@ async function delProd(id, sku) {
 }
 
 // ── MODAL EDITAR PRODUTO ─────────────────────────────────
-function openEdit(id) {
+async function openEdit(id) {
   const p = C.produtos.find(x => x.id === id);
   if(!p) return;
   document.getElementById('edit-id').value        = id;
@@ -922,8 +960,9 @@ function openEdit(id) {
   document.getElementById('edit-qtd').value       = p.qtd_estoque||0;
   document.getElementById('edit-status').value    = p.status||'enviado';
   document.getElementById('edit-rastreio').value  = p.rastreio_atual||'';
-  document.getElementById('edit-forn').value      = p.fornecedor_ref||'';
   document.getElementById('edit-custo-total').value = p.custo_total_brl||0;
+  await ensureFornecedores();
+  fillFornSelect('edit', p.fornecedor_ref||'');
   recalc();
   document.getElementById('modal-edit').classList.add('open');
 }
@@ -952,6 +991,12 @@ async function saveEdit() {
   const frete = parseFloat(document.getElementById('edit-frete').value)||0;
   const imp   = parseFloat(document.getElementById('edit-imp').value)||0;
 
+  const editFornVal = document.getElementById('edit-forn-select').value;
+  if (editFornVal === '__new__') {
+    toast('Preencha e salve o novo fornecedor antes de continuar (ou cancele)', 'err');
+    return;
+  }
+
   const body = {
     nome:           document.getElementById('edit-nome').value.trim(),
     tamanho:        document.getElementById('edit-tam').value,
@@ -962,7 +1007,7 @@ async function saveEdit() {
     qtd_estoque:    parseInt(document.getElementById('edit-qtd').value)||0,
     status:         novoStatus,
     rastreio_atual: novoRastreio,
-    fornecedor_ref: document.getElementById('edit-forn').value.trim(),
+    fornecedor_ref: editFornVal,
   };
 
   // Sync de pacote inteligente
@@ -1422,11 +1467,82 @@ async function delCli(id) {
 }
 
 // ── FORNECEDORES ─────────────────────────────────────────
+async function ensureFornecedores(force=false) {
+  if(!force && C.loaded.fornecedores) return;
+  try {
+    C.fornecedores = await db.get('fornecedores', 'select=*&order=nome') || [];
+    C.loaded.fornecedores = true;
+  } catch(e) { toast('Erro fornecedores: '+e.message, 'err'); }
+}
+
 async function loadForn() {
-  if(!C.loaded.fornecedores) {
-    try { C.fornecedores = await db.get('fornecedores','order=nome')||[]; C.loaded.fornecedores=true; } catch(e){}
-  }
+  await ensureFornecedores();
   renderForn();
+}
+
+// ── DROPDOWN DE FORNECEDOR (usado no form de produto e no modal de edição) ──
+function fillFornSelect(prefix, selectedNome) {
+  const sel = document.getElementById(prefix + '-forn-select');
+  if (!sel) return;
+  const opts = ['<option value="">— Selecione —</option>']
+    .concat(C.fornecedores.map(f => `<option value="${f.nome}">${f.nome}${f.contato ? ' · '+f.contato : ''}</option>`))
+    .concat(['<option value="__new__">+ Novo fornecedor...</option>']);
+  sel.innerHTML = opts.join('');
+  // Seleciona o fornecedor atual se existir na lista; senão mantém o texto como está (fornecedor antigo/livre)
+  const match = C.fornecedores.find(f => f.nome === selectedNome);
+  if (match) {
+    sel.value = match.nome;
+  } else if (selectedNome) {
+    // Fornecedor salvo não está cadastrado (dado legado) — adiciona como opção extra selecionada
+    const extra = document.createElement('option');
+    extra.value = selectedNome;
+    extra.textContent = selectedNome + ' (não cadastrado)';
+    sel.insertBefore(extra, sel.lastElementChild);
+    sel.value = selectedNome;
+  } else {
+    sel.value = '';
+  }
+  onFornSelectChange(prefix);
+}
+
+function onFornSelectChange(prefix) {
+  const sel    = document.getElementById(prefix + '-forn-select');
+  const inline = document.getElementById(prefix + '-forn-inline');
+  if (!sel || !inline) return;
+  if (sel.value === '__new__') {
+    inline.style.display = 'block';
+    setTimeout(() => document.getElementById(prefix + '-forn-new-nome')?.focus(), 50);
+  } else {
+    inline.style.display = 'none';
+  }
+}
+
+function cancelQuickForn(prefix) {
+  document.getElementById(prefix + '-forn-inline').style.display = 'none';
+  document.getElementById(prefix + '-forn-select').value = '';
+  document.getElementById(prefix + '-forn-new-nome').value = '';
+  document.getElementById(prefix + '-forn-new-cont').value = '';
+}
+
+async function quickAddForn(prefix) {
+  const nome = document.getElementById(prefix + '-forn-new-nome').value.trim();
+  const cont = document.getElementById(prefix + '-forn-new-cont').value.trim();
+  if (!nome) { toast('Digite o nome do fornecedor', 'err'); return; }
+  try {
+    await db.post('fornecedores', { nome, plataforma: 'WeChat', contato: cont, linha_rastreio: 'LZ-CN', sla_dias: 2, lead_time_dias: 20 });
+    await ensureFornecedores(true);
+    fillFornSelect(prefix, nome);
+    document.getElementById(prefix + '-forn-inline').style.display = 'none';
+    document.getElementById(prefix + '-forn-new-nome').value = '';
+    document.getElementById(prefix + '-forn-new-cont').value = '';
+    toast('✓ Fornecedor "' + nome + '" cadastrado e selecionado!');
+  } catch(e) { toast('Erro: '+e.message, 'err'); }
+}
+
+async function openNewProd() {
+  await ensureFornecedores();
+  fillFornSelect('p', '');
+  document.getElementById('fp').classList.add('open');
 }
 
 function renderForn() {
@@ -1439,16 +1555,61 @@ function renderForn() {
     <td><span class="badge b-info">${f.linha_rastreio||'—'}</span></td>
     <td style="text-align:center">${f.sla_dias||'—'}</td>
     <td style="text-align:center">${f.lead_time_dias||'—'}</td>
-    <td><button class="btn sm danger" onclick="delForn('${f.id}')"><i class="ti ti-x"></i></button></td>
+    <td><button class="btn sm" onclick="openEditForn('${f.id}')"><i class="ti ti-edit"></i></button> <button class="btn sm danger" onclick="delForn('${f.id}')"><i class="ti ti-x"></i></button></td>
   </tr>`).join('');
 }
 
+function newForn() {
+  document.getElementById('f-id').value = '';
+  document.getElementById('f-nome').value = '';
+  document.getElementById('f-plat').value = 'WeChat';
+  document.getElementById('f-cont').value = '';
+  document.getElementById('f-rastr').value = 'LZ-CN';
+  document.getElementById('f-sla').value = 2;
+  document.getElementById('f-lead').value = 20;
+  document.getElementById('f-obs').value = '';
+  document.getElementById('ff-title').textContent = 'Cadastrar Fornecedor';
+  document.getElementById('ff-btn-save').textContent = 'Salvar';
+  document.getElementById('ff').classList.add('open');
+}
+
+function openEditForn(id) {
+  const f = C.fornecedores.find(x => x.id === id);
+  if(!f) return;
+  document.getElementById('f-id').value    = f.id;
+  document.getElementById('f-nome').value  = f.nome||'';
+  document.getElementById('f-plat').value  = f.plataforma||'WeChat';
+  document.getElementById('f-cont').value  = f.contato||'';
+  document.getElementById('f-rastr').value = f.linha_rastreio||'LZ-CN';
+  document.getElementById('f-sla').value   = f.sla_dias||0;
+  document.getElementById('f-lead').value  = f.lead_time_dias||0;
+  document.getElementById('f-obs').value   = f.observacoes||'';
+  document.getElementById('ff-title').textContent = 'Editar Fornecedor';
+  document.getElementById('ff-btn-save').textContent = 'Salvar alterações';
+  document.getElementById('ff').classList.add('open');
+}
+
 async function saveForn() {
+  const id   = document.getElementById('f-id').value;
   const nome = document.getElementById('f-nome').value.trim();
   if(!nome) { toast('Nome obrigatório','err'); return; }
+  const body = {
+    nome,
+    plataforma:     document.getElementById('f-plat').value,
+    contato:        document.getElementById('f-cont').value.trim(),
+    linha_rastreio: document.getElementById('f-rastr').value,
+    sla_dias:       parseInt(document.getElementById('f-sla').value)||0,
+    lead_time_dias: parseInt(document.getElementById('f-lead').value)||0,
+    observacoes:    document.getElementById('f-obs').value.trim()
+  };
   try {
-    await db.post('fornecedores',{nome,plataforma:document.getElementById('f-plat').value,contato:document.getElementById('f-cont').value.trim(),linha_rastreio:document.getElementById('f-rastr').value,sla_dias:parseInt(document.getElementById('f-sla').value)||0,lead_time_dias:parseInt(document.getElementById('f-lead').value)||0,observacoes:document.getElementById('f-obs').value.trim()});
-    toast('Fornecedor cadastrado!');
+    if (id) {
+      await db.patch('fornecedores', 'id=eq.'+id, body);
+      toast('Fornecedor atualizado!');
+    } else {
+      await db.post('fornecedores', body);
+      toast('Fornecedor cadastrado!');
+    }
     togForm('ff');
     C.loaded.fornecedores=false; await loadForn();
   } catch(e) { toast('Erro: '+e.message,'err'); }
