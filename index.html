@@ -409,7 +409,22 @@ tbody tr:hover td{background:var(--gold-pale)}
           <div class="carr-total" id="carr-total"></div>
         </div>
         <div class="fg" style="margin-top:14px">
-          <div class="field"><label>Cliente</label><select id="v-cli"></select></div>
+          <div class="field">
+            <label>Cliente</label>
+            <select id="v-cli" onchange="onCliSelectChange()"></select>
+            <div id="v-cli-inline" style="display:none;margin-top:8px;padding:12px;background:var(--bk4);border:var(--border-g);border-radius:var(--rad)">
+              <div class="fg fg1" style="margin-bottom:8px">
+                <input id="v-cli-new-nome" placeholder="Nome do cliente">
+              </div>
+              <div class="fg fg1" style="margin-bottom:8px">
+                <input id="v-cli-new-wpp" placeholder="WhatsApp (opcional)">
+              </div>
+              <div class="row">
+                <button class="btn sm primary" type="button" onclick="quickAddCli()">Salvar Cliente</button>
+                <button class="btn sm" type="button" onclick="cancelQuickCli()">Cancelar</button>
+              </div>
+            </div>
+          </div>
           <div class="field"><label>Forma pagamento</label><select id="v-pag"><option>Pix</option><option>Dinheiro</option><option>Cartão Débito</option><option>Cartão Crédito</option><option>Parcial / Sinal</option></select></div>
           <div class="field"><label>Canal</label><select id="v-canal"><option>WhatsApp</option><option>Instagram</option><option>Presencial</option><option>Outro</option></select></div>
           <div class="field"><label>Sinal / Entrada R$</label><input id="v-sinal" type="number" value="0"></div>
@@ -1208,12 +1223,52 @@ function fillSelects() {
     </option>`;
   }).join('');
   fillVPreco();
-  document.getElementById('v-cli').innerHTML =
+  fillCliSelect();
+}
+
+function fillCliSelect(selectedId) {
+  const sel = document.getElementById('v-cli');
+  sel.innerHTML =
     '<option value="">— Sem cadastro —</option>' +
-    C.clientes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+    C.clientes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('') +
+    '<option value="__new__">+ Novo cliente...</option>';
+  if(selectedId) sel.value = selectedId;
 }
 
 function onTipoVndChange() { fillSelects(); }
+
+function onCliSelectChange() {
+  const sel    = document.getElementById('v-cli');
+  const inline = document.getElementById('v-cli-inline');
+  if(sel.value === '__new__') {
+    inline.style.display = 'block';
+    setTimeout(() => document.getElementById('v-cli-new-nome')?.focus(), 50);
+  } else {
+    inline.style.display = 'none';
+  }
+}
+
+function cancelQuickCli() {
+  document.getElementById('v-cli-inline').style.display = 'none';
+  document.getElementById('v-cli').value = '';
+  document.getElementById('v-cli-new-nome').value = '';
+  document.getElementById('v-cli-new-wpp').value = '';
+}
+
+async function quickAddCli() {
+  const nome = document.getElementById('v-cli-new-nome').value.trim();
+  const wpp  = document.getElementById('v-cli-new-wpp').value.trim();
+  if(!nome) { toast('Digite o nome do cliente', 'err'); return; }
+  try {
+    const [novo] = await db.post('clientes', { nome, whatsapp: wpp });
+    await ensureClientes(true);
+    fillCliSelect(novo.id);
+    document.getElementById('v-cli-inline').style.display = 'none';
+    document.getElementById('v-cli-new-nome').value = '';
+    document.getElementById('v-cli-new-wpp').value = '';
+    toast('✓ Cliente "' + nome + '" cadastrado e selecionado!');
+  } catch(e) { toast('Erro: '+e.message, 'err'); }
+}
 
 function fillVPreco() {
   const vp = document.getElementById('v-prod');
@@ -1331,6 +1386,10 @@ async function saveVnd() {
   }
 
   const cliId = document.getElementById('v-cli').value;
+  if(cliId === '__new__') {
+    toast('Preencha e salve o novo cliente antes de continuar (ou cancele)', 'err');
+    return;
+  }
   const tipo  = carrinho.every(i=>i.tipo==='reserva') ? 'reserva' : 'venda';
 
   try {
