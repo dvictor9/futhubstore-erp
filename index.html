@@ -760,7 +760,7 @@ function renderDash() {
       }).join('')
     : '<div class="empty">Nenhum pacote em trânsito</div>';
 
-  const rv = [...C.vendas].filter(v=>v.status!=='cancelado'&&v.tipo!=='reserva').reverse().slice(0,5);
+  const rv = [...C.vendas].filter(v=>v.status!=='cancelado'&&v.tipo!=='reserva').slice(0,5).reverse();
   document.getElementById('d-vendas').innerHTML = rv.length
     ? rv.map(v => `<div class="irow"><div><div style="font-weight:500">${v.skus||'—'}</div><div style="font-size:11px;color:var(--tx3)">${v.cliente_nome||'—'} · ${fmtD(v.data_venda)}</div></div><span style="color:var(--g);font-weight:600">${R(v.total_brl)}</span></div>`).join('')
     : '<div class="empty">Nenhuma venda ainda</div>';
